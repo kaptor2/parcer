@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inline Scripts</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+      }
+      input,
+      button {
+        margin: 10px 0;
+        padding: 8px;
+        width: 100%;
+        max-width: 400px;
+      }
+      pre {
+        background: #f4f4f4;
+        padding: 10px;
+        overflow: auto;
+        max-height: 200px;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Встраивание скриптов</h2>
+    <input
+      type="text"
+      id="urlInput"
+      placeholder="Введите URL (например, https://example.com)"
+    />
+    <button onclick="processPage()">Обработать</button>
+    <a id="downloadLink" style="display: none" download="inline.html"
+      >Скачать HTML</a
+    >
+    <pre id="status"></pre>
+
+    <script>
+      async function processPage() {
+        const url = document.getElementById("urlInput").value.trim();
+        if (!url) return alert("Введите URL");
+
+        document.getElementById("status").textContent = "Загружаю страницу...";
+
+        try {
+          const response = await fetch(url);
+          let html = await response.text();
+
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, "text/html");
+          const scripts = [...doc.querySelectorAll("script[src]")];
+
+          for (let script of scripts) {
+            const src = script.getAttribute("src");
+
+            // Пропускаем относительные ссылки
+            const absoluteSrc = new URL(src, url).href;
+
+            document.getElementById(
+              "status"
+            ).textContent = `Загружаю ${absoluteSrc}...`;
+
+            try {
+              const scriptResponse = await fetch(absoluteSrc);
+              const scriptText = await scriptResponse.text();
+
+              // Создаём новый <script> с содержимым
+              const newScript = document.createElement("script");
+              newScript.textContent = scriptText;
+
+              if (script.hasAttribute("defer")) {
+                // Если был defer, вставляем в конец body
+                script.remove();
+                doc.body.appendChild(newScript);
+              } else {
+                // Иначе заменяем оригинальный <script>
+                script.parentNode.replaceChild(newScript, script);
+              }
+            } catch (err) {
+              console.error(`Ошибка загрузки: ${absoluteSrc}`, err);
+            }
+          }
+
+          // Генерируем новый HTML-код
+          const newHtml = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+          const blob = new Blob([newHtml], { type: "text/html" });
+          const urlBlob = URL.createObjectURL(blob);
+
+          const downloadLink = document.getElementById("downloadLink");
+          downloadLink.href = urlBlob;
+          downloadLink.style.display = "block";
+          downloadLink.textContent = "Скачать обработанный HTML";
+          document.getElementById("status").textContent = "Готово!";
+        } catch (err) {
+          document.getElementById("status").textContent =
+            "Ошибка: " + err.message;
+        }
+      }
+    </script>
+  </body>
+</html>
